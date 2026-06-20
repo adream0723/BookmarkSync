@@ -2,6 +2,9 @@
 
 > [English](README.en.md) | [中文](README.md)
 
+> [!WARNING]
+> Please back up your bookmarks before use. This tool is provided "as is" without any guarantee of stability or reliability. Use at your own risk.
+
 Cross-platform browser bookmark sync tool. Based on Gist (Gitee/GitHub) storage with smart merge, manual merge, AES-256-GCM encryption, i18n UI, and time machine rollback.
 
 > More storage backends (WebDAV, self-hosted Git, etc.) coming in future releases.
