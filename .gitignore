@@ -1,0 +1,13 @@
+node_modules/
+.output/
+.wxt/
+dist/
+.pnpm-store/
+*.log
+translate.py
+__pycache__/
+*.pyc
+.env
+.DS_Store
+Thumbs.db
+思路.md

@@ -1,0 +1,139 @@
+/* Popup container */
+.popup-container {
+  width: 320px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+/* Header */
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+}
+
+.popup-settings-link {
+  color: #6c757d;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.popup-settings-link:hover {
+  color: #0d6efd;
+}
+
+/* Stats card */
+.popup-card {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.popup-card-emoji {
+  font-size: 20px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.popup-card-label {
+  font-size: 11px;
+  color: #6c757d;
+  line-height: 1.2;
+}
+
+.popup-card-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.popup-card-divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 0 4px;
+}
+
+.popup-card-half {
+  flex: 1 1 0;
+  text-align: center;
+}
+
+/* Section spacing */
+.popup-section {
+  padding: 2px 0;
+}
+
+.popup-sub-text {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+
+/* Divider */
+.popup-divider {
+  margin: 8px 0;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Icon + label + value row */
+.popup-icon {
+  margin-right: 6px;
+  font-size: 14px;
+  color: #6c757d;
+  flex-shrink: 0;
+}
+
+.popup-emoji {
+  margin-right: 6px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.popup-label {
+  color: #6c757d;
+  margin-right: 6px;
+}
+
+.popup-value {
+  margin-left: auto;
+  font-weight: 500;
+}
+
+/* Auto sync row */
+#auto-sync-switch {
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.gap-2 {
+  gap: 6px;
+}
+
+.popup-error {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #dc3545;
+  background: #fff5f5;
+  border: 1px solid #ffcccc;
+  border-radius: 6px;
+  word-break: break-all;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+/* ───── Popup 深色主题 ───── */
+.theme-dark .popup-container { background: #1a1a2e; color: #e0e0e0; }
+.theme-dark .popup-card { background: #16213e; border-color: #2a2a4a; }
+.theme-dark .popup-card-label { color: #888; }
+.theme-dark .popup-card-divider { background: #2a2a4a; }
+.theme-dark .popup-label { color: #888; }
+.theme-dark .popup-settings-link { color: #888; }
+.theme-dark .popup-settings-link:hover { color: #7cb3ff; }
+.theme-dark .popup-error { background: #3a1a1a; border-color: #5a2a2a; color: #ff8888; }

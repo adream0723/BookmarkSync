@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BookmarkSync - 合并预览</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 13px; background: #f0f0f0; }
+    .header { background: #fff; border-bottom: 1px solid #ddd; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; }
+    .header h2 { margin: 0; font-size: 18px; }
+    .stats { font-size: 13px; color: #666; }
+
+    .diff-container { margin: 0; max-height: calc(100vh - 150px); overflow-y: auto; }
+    .diff-header-row {
+      display: flex; background: #fafafa; border-bottom: 2px solid #ddd;
+      position: sticky; top: 0; z-index: 9;
+    }
+    .diff-header {
+      flex: 1; padding: 8px 4px; font-weight: 600; font-size: 12px;
+      text-align: center; border-right: 1px solid #ddd;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .diff-header:nth-child(4) { flex: 0 0 80px; }
+    .diff-header:last-child { border-right: none; flex: 0 0 130px; }
+
+    .diff-row { display: flex; border-bottom: 1px solid #eee; background: #fff; }
+    .diff-row:hover { background: #f8f9ff; }
+    .diff-cell {
+      flex: 1; padding: 4px 6px; border-right: 1px solid #eee;
+      display: flex; align-items: center; gap: 4px; min-height: 32px;
+      overflow: hidden;
+    }
+    .diff-cell:nth-child(4) { flex: 0 0 80px; justify-content: center; }
+    .diff-cell:last-child { border-right: none; flex: 0 0 130px; justify-content: center; flex-wrap: wrap; }
+
+    .diff-indent { flex-shrink: 0; display: inline-block; }
+    .diff-icon { font-size: 13px; width: 18px; flex-shrink: 0; text-align: center; }
+    .diff-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-size: 13px; }
+    .diff-url { font-size: 11px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; margin-left: 4px; }
+    .diff-empty { color: #999; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: 1; }
+
+    .diff-row:has(.cell-added) { background: #f0faf0; }
+    .diff-row:has(.cell-removed) { background: #fef0f0; }
+    .diff-row:has(.cell-modified) { background: #fff8e1; }
+
+    .actions { text-align: center; padding: 20px; display: flex; gap: 12px; justify-content: center; }
+    .btn-primary {
+      background: #1976d2; color: #fff; border: none;
+      padding: 10px 32px; border-radius: 6px; cursor: pointer;
+      font-size: 15px; font-weight: 600;
+    }
+    .btn-primary:hover { background: #1565c0; }
+    .btn-primary:disabled { background: #ccc; cursor: default; }
+    .btn-success {
+      background: #2e7d32; color: #fff; border: none;
+      padding: 10px 32px; border-radius: 6px; cursor: pointer;
+      font-size: 15px; font-weight: 600;
+    }
+    .btn-success:hover { background: #1b5e20; }
+    .btn-secondary {
+      background: #757575; color: #fff; border: none;
+      padding: 10px 24px; border-radius: 6px; cursor: pointer;
+      font-size: 15px;
+    }
+    .btn-secondary:hover { background: #616161; }
+
+    .empty { text-align: center; padding: 60px; color: #999; font-size: 16px; }
+
+    /* ───── 深色主题 ───── */
+    .theme-dark body { background: #1a1a2e; }
+    .theme-dark .header { background: #16213e; border-color: #2a2a4a; color: #e0e0e0; }
+    .theme-dark .stats { color: #888; }
+    .theme-dark .diff-header-row { background: #1a1a3e; border-color: #2a2a4a; }
+    .theme-dark .diff-header { color: #b0b0c0; border-color: #2a2a4a; }
+    .theme-dark .diff-row { background: #16213e; border-color: #2a2a4a; }
+    .theme-dark .diff-row:hover { background: #1a1a3e; }
+    .theme-dark .diff-cell { border-color: #2a2a4a; color: #e0e0e0; }
+    .theme-dark .diff-url { color: #888; }
+    .theme-dark .diff-empty { color: #666; }
+    .theme-dark .diff-row:has(.cell-added) { background: #1a2a1a; }
+    .theme-dark .diff-row:has(.cell-removed) { background: #2a1a1a; }
+    .theme-dark .diff-row:has(.cell-modified) { background: #2a2a1a; }
+    .theme-dark .btn-primary:disabled { background: #444; }
+    .theme-dark .btn-secondary { background: #444; }
+    .theme-dark .btn-secondary:hover { background: #555; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="header">
+      <h2 id="mergeTitle">📋 手动合并</h2>
+      <span class="stats" id="stats">加载中...</span>
+    </div>
+    <div class="diff-container" id="content"></div>
+    <div class="actions" id="actions" style="display:none">
+      <button class="btn-secondary" id="cancelBtn">取消</button>
+      <button class="btn-success" id="saveBtn">确认合并</button>
+    </div>
+  </div>
+  <script type="module" src="./merge.ts"></script>
+</body>
+</html>
