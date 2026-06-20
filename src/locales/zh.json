@@ -1,7 +1,6 @@
 {
   "appName": "BookmarkSync",
   "appDesc": "书签同步工具",
-
   "common.loading": "加载中...",
   "common.save": "保存",
   "common.cancel": "取消",
@@ -19,7 +18,6 @@
   "common.unknownDevice": "未知设备",
   "common.notConfigured": "未配置",
   "common.required": "必填",
-
   "nav.settings": "设置",
   "nav.basic": "基础设置",
   "nav.storage": "存储设置",
@@ -28,7 +26,6 @@
   "nav.synclog": "同步记录",
   "nav.tools": "工具",
   "nav.about": "关于",
-
   "dashboard.title": "仪表盘",
   "dashboard.bookmarkCount": "书签总数",
   "dashboard.storageType": "存储方式",
@@ -62,7 +59,6 @@
   "dashboard.heatmapLess": "少",
   "dashboard.heatmapMore": "多",
   "dashboard.heatmapSyncCount": "次同步",
-
   "settings.basic": "基础设置",
   "settings.appearance": "外观设置",
   "settings.language": "界面语言",
@@ -129,7 +125,6 @@
   "settings.jsonFormat": "格式化 JSON",
   "settings.formatJson": "格式化 JSON（便于调试）",
   "settings.formatJsonHint": "以格式化的 JSON 存储书签数据，方便手动查看，但会增加存储空间",
-
   "storage.title": "存储设置",
   "storage.type": "存储方式",
   "storage.selectService": "选择存储服务",
@@ -161,7 +156,6 @@
   "storage.snippet": "代码片段",
   "storage.save": "保存设置",
   "storage.saved": "设置已保存",
-
   "timemachine.title": "快照时光机",
   "timemachine.empty": "暂无快照记录，同步后会自动生成",
   "timemachine.time": "时间",
@@ -179,7 +173,6 @@
   "timemachine.restoreFailed": "恢复失败",
   "timemachine.treeTitle": "快照书签树",
   "timemachine.unnamed": "(unnamed)",
-
   "synclog.title": "同步记录",
   "synclog.empty": "暂无同步记录",
   "synclog.time": "时间",
@@ -204,7 +197,6 @@
   "synclog.sync": "立即同步",
   "synclog.oldUrl": "原URL",
   "synclog.noChanges": "—",
-
   "merge.title": "手动合并",
   "merge.snapshot": "基准快照",
   "merge.local": "本地",
@@ -224,7 +216,6 @@
   "merge.mergeChanges": "合并变更 {{n}} 处",
   "merge.localChanges": "本地修改 {{n}} 项",
   "merge.cloudChanges": "云端修改 {{n}} 项",
-
   "popup.syncNow": "立即同步",
   "popup.upload": "覆盖上传",
   "popup.download": "从云端下载",
@@ -242,14 +233,11 @@
   "popup.manual": "手动",
   "popup.localFirst": "本地优先",
   "popup.cloudFirst": "云端优先",
-
   "about.title": "关于",
   "about.version": "版本",
   "about.source": "源代码",
   "about.issues": "反馈问题",
-
   "tools.title": "工具",
-
   "autoSync.fallbackManual": "自动同步不支持手动模式，已切换为智能合并",
   "notification.uploadSuccess": "书签上传成功",
   "notification.downloadSuccess": "书签下载成功",
@@ -257,12 +245,12 @@
   "notification.syncConflict": "智能合并同步完成（{{n}} 处冲突已仲裁）",
   "notification.orderOnly": "排序已同步",
   "notification.skipOrder": "排序不同步，跳过",
-
   "status.never": "未同步",
   "status.sync_success": "同步成功",
   "status.sync_remote_success": "同步成功",
   "status.sync_skip_order": "同步成功（跳过排序）",
   "status.sync_order_only": "同步成功（仅排序）",
   "status.upload_success": "同步成功",
-  "status.download_success": "下载成功"
+  "status.download_success": "下载成功",
+  "dashboard.heatmapMonth": "月"
 }

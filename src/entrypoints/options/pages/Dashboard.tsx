@@ -322,7 +322,7 @@ function CalendarHeatmap({ data }: { data: Map<string, number> }) {
     const m = cur.getMonth();
     if (!labeledMonths.has(m)) {
       labeledMonths.add(m);
-      monthLabels.push({ label: `${m + 1}${t('dashboard.heatmapSyncCount')}`, col });
+      monthLabels.push({ label: `${m + 1}${t('dashboard.heatmapMonth')}`, col });
     }
     days.push({ date: new Date(cur), count, y: cur.getDay(), w: col });
     if (cur.getDay() === 6) col++;

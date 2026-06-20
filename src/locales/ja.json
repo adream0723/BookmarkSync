@@ -251,5 +251,6 @@
   "status.download_success": "ダウンロード成功",
   "settings.langJa": "日本語",
   "settings.langKo": "한국어",
-  "settings.encryptionPasswordPlaceholder": "输入加密密码短语"
+  "settings.encryptionPasswordPlaceholder": "输入加密密码短语",
+  "dashboard.heatmapMonth": "月"
 }

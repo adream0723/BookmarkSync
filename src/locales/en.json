@@ -1,7 +1,6 @@
 {
   "appName": "BookmarkSync",
   "appDesc": "Bookmark Sync Tool",
-
   "common.loading": "Loading...",
   "common.save": "Save",
   "common.cancel": "Cancel",
@@ -19,7 +18,6 @@
   "common.notConfigured": "Not configured",
   "common.unknownDevice": "Unknown device",
   "common.required": "Required",
-
   "nav.settings": "Settings",
   "nav.basic": "Basic",
   "nav.storage": "Storage",
@@ -28,7 +26,6 @@
   "nav.synclog": "Sync Log",
   "nav.tools": "Tools",
   "nav.about": "About",
-
   "dashboard.title": "Dashboard",
   "dashboard.bookmarkCount": "Bookmarks",
   "dashboard.storageType": "Storage",
@@ -62,7 +59,6 @@
   "dashboard.heatmapLess": "Less",
   "dashboard.heatmapMore": "More",
   "dashboard.heatmapSyncCount": "syncs",
-
   "settings.basic": "Basic Settings",
   "settings.appearance": "Appearance",
   "settings.language": "Language",
@@ -129,7 +125,6 @@
   "settings.jsonFormat": "JSON Format",
   "settings.formatJson": "Format JSON (easier debugging)",
   "settings.formatJsonHint": "Store bookmark data in formatted JSON for manual inspection, but increases storage",
-
   "storage.title": "Storage Settings",
   "storage.type": "Storage Type",
   "storage.selectService": "Select Storage Service",
@@ -161,7 +156,6 @@
   "storage.snippet": "snippet",
   "storage.save": "Save Settings",
   "storage.saved": "Settings saved",
-
   "timemachine.title": "Time Machine",
   "timemachine.empty": "No snapshots yet. They will be created automatically on sync.",
   "timemachine.time": "Time",
@@ -179,7 +173,6 @@
   "timemachine.restoreFailed": "Restore failed",
   "timemachine.treeTitle": "Snapshot Bookmark Tree",
   "timemachine.unnamed": "(unnamed)",
-
   "synclog.title": "Sync Log",
   "synclog.empty": "No sync records yet",
   "synclog.time": "Time",
@@ -204,7 +197,6 @@
   "synclog.sync": "Sync",
   "synclog.oldUrl": "Old URL",
   "synclog.noChanges": "—",
-
   "merge.title": "Manual Merge",
   "merge.snapshot": "Snapshot",
   "merge.local": "Local",
@@ -224,7 +216,6 @@
   "merge.mergeChanges": "{{n}} merge changes",
   "merge.localChanges": "{{n}} local changes",
   "merge.cloudChanges": "{{n}} cloud changes",
-
   "popup.syncNow": "Sync Now",
   "popup.upload": "Upload",
   "popup.download": "Download",
@@ -234,7 +225,7 @@
   "popup.autoSyncOff": "Auto Sync Off",
   "popup.interval": "Every {{n}} min",
   "popup.intervalHours": "Every {h}h {m}m",
-  "popup.settings": "Settings \u203A",
+  "popup.settings": "Settings ›",
   "popup.confirmDownload": "Browser has {{n}} bookmarks.\n\nClick OK to clear existing bookmarks and download from cloud.\nClick Cancel to skip.",
   "popup.downloadSkipped": "Download skipped",
   "popup.downloadBlocked": "Bookmarks already exist, skipped import. Please clear bookmarks and try again.",
@@ -242,14 +233,11 @@
   "popup.manual": "Manual",
   "popup.localFirst": "Local First",
   "popup.cloudFirst": "Cloud First",
-
   "about.title": "About",
   "about.version": "Version",
   "about.source": "Source Code",
   "about.issues": "Report Issues",
-
   "tools.title": "Tools",
-
   "autoSync.fallbackManual": "Auto sync does not support manual mode, switched to smart merge",
   "notification.uploadSuccess": "Bookmarks uploaded",
   "notification.downloadSuccess": "Bookmarks downloaded",
@@ -257,12 +245,12 @@
   "notification.syncConflict": "Smart merge complete ({{n}} conflicts resolved)",
   "notification.orderOnly": "Order synced",
   "notification.skipOrder": "Order sync skipped",
-
   "status.never": "Never synced",
   "status.sync_success": "Sync OK",
   "status.sync_remote_success": "Sync OK",
   "status.sync_skip_order": "Sync OK (order skipped)",
   "status.sync_order_only": "Sync OK (order only)",
   "status.upload_success": "Sync OK",
-  "status.download_success": "Download OK"
+  "status.download_success": "Download OK",
+  "dashboard.heatmapMonth": ""
 }
