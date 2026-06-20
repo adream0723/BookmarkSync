@@ -1,11 +1,12 @@
 import i18n from '../../locales/i18n';
+import { fp } from '../../utils/fingerprint';
 import { saveSnapshot, saveSnapshotRecord } from '../../utils/bookmarks';
 import services from '../../utils/services';
 import optionsStorage from '../../utils/optionsStorage';
 import { encodeEmoji } from '../../utils/compress';
 import { SYNC_VERSION, STORAGE } from '../../utils/constants';
 import { applyMergedTree } from '../../utils/import';
-import { addSyncLog, ChangeDetail } from '../../utils/syncLog';
+import { addSyncLog, ChangeDetail, computeChanges } from '../../utils/syncLog';
 import { encryptContent } from '../../utils/crypto';
 
 const STORAGE_KEY = STORAGE.MANUAL_MERGE;
@@ -38,8 +39,6 @@ function fmtTime(ts: number): string {
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-
-function fp(t: string, u?: string): string { return `${t}||${u || ''}`; }
 
 function flattenTree(nodes: any[], d = 0, pp: string[] = []): FlatInfo[] {
   const r: FlatInfo[] = [];
@@ -354,47 +353,6 @@ function indent(d: number): HTMLSpanElement { const s = document.createElement('
 function icon(f: boolean): HTMLSpanElement { const s = document.createElement('span'); s.className = 'diff-icon'; s.textContent = f ? '📁' : '📄'; return s; }
 
 /** Compute change details between base and result tree */
-function computeChanges(base: any[], result: any[]): ChangeDetail[] {
-  function flatten(nodes: any[]): Map<string, { title: string; url?: string }> {
-    const m = new Map();
-    function walk(ns: any[]) {
-      for (const n of ns) {
-        const f = `${n.title || ''}||${n.url || ''}`;
-        m.set(f, { title: n.title, url: n.url });
-        if (n.children) walk(n.children);
-      }
-    }
-    walk(nodes);
-    return m;
-  }
-  const baseMap = flatten(base || []);
-  const resultMap = flatten(result || []);
-  const allFps = new Set([...baseMap.keys(), ...resultMap.keys()]);
-  const changes: ChangeDetail[] = [];
-  const usedDel = new Set<string>(), usedAdd = new Set<string>();
-
-  for (const f of allFps) {
-    const b = baseMap.get(f);
-    const r = resultMap.get(f);
-    if (b && !r) {
-      const paired = [...resultMap.entries()].find(([k, v]) =>
-        !usedAdd.has(k) && v.title === b.title && v.url !== b.url
-      );
-      if (paired) {
-        changes.push({ fingerprint: paired[0], type: 'modified', title: paired[1].title, url: paired[1].url, oldTitle: b.title, oldUrl: b.url });
-        usedDel.add(f); usedAdd.add(paired[0]);
-      } else {
-        changes.push({ fingerprint: f, type: 'deleted', title: b.title, url: b.url });
-        usedDel.add(f);
-      }
-    } else if (!b && r) {
-      if (usedAdd.has(f)) continue;
-      changes.push({ fingerprint: f, type: 'added', title: r.title, url: r.url });
-      usedAdd.add(f);
-    }
-  }
-  return changes;
-}
 
 // ── Load saved language preference before rendering ──
 (async () => {

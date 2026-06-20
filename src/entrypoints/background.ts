@@ -8,8 +8,9 @@ import optionsStorage from '../utils/optionsStorage';
 import { showNotification } from '../utils/notify';
 import { decompress, encodeEmoji } from '../utils/compress';
 import { SYNC_VERSION, STORAGE } from '../utils/constants';
-import { addSyncLog, ChangeDetail } from '../utils/syncLog';
+import { addSyncLog, ChangeDetail, computeChanges } from '../utils/syncLog';
 import { encryptContent, decryptContent } from '../utils/crypto';
+import { fp } from '../utils/fingerprint';
 
 export default defineBackground(() => {
   console.log('BookmarkSync background loaded');
@@ -81,10 +82,17 @@ async function runSync(strategy: string) {
   const fileName = settings.storageType === 'gitee_gist' ? settings.giteeGistFileName : settings.gistFileName;
   const label = settings.storageType === 'gitee_gist' ? 'Gitee Gist' : 'GitHub Gist';
 
-  // local first
-  if (strategy === 'local') {
-    const payload = await wrapSyncPayload();
-    await assignSyncIds(payload.bookmarks);
+  async function downloadRemote() {
+    const raw = await services.download();
+    if (!raw) throw new Error(i18n.t('notification.cloudNoData'));
+    const rawStr = settings.encryptionPassword ? await decryptContent(raw, settings.encryptionPassword) : raw;
+    if (rawStr.trimStart().startsWith('{')) return JSON.parse(rawStr);
+    const d = decompress(rawStr);
+    if (d && d.trimStart().startsWith('{')) return JSON.parse(d);
+    throw new Error(i18n.t('notification.cloudFormatError'));
+  }
+
+  async function uploadJSON(payload: any) {
     const content = settings.formatJson
       ? encodeEmoji(JSON.stringify(payload, null, 2))
       : encodeEmoji(JSON.stringify(payload));
@@ -92,6 +100,13 @@ async function runSync(strategy: string) {
       ? await encryptContent(content, settings.encryptionPassword)
       : content;
     await services.upload({ files: { [fileName]: { content: uploadContent } } });
+  }
+
+  // ── local first ──
+  if (strategy === 'local') {
+    const payload = await wrapSyncPayload();
+    await assignSyncIds(payload.bookmarks);
+    await uploadJSON(payload);
     await saveSnapshot(payload.bookmarks, undefined, payload.syncedAt);
     await saveSnapshotRecord('upload', payload.bookmarks);
     await saveSyncState({ lastStatus: 'sync_success', lastSyncTime: Date.now(), storageType: label });
@@ -100,18 +115,9 @@ async function runSync(strategy: string) {
     return { success: true };
   }
 
-  // remote first
+  // ── remote first ──
   if (strategy === 'remote') {
-    const raw = await services.download();
-    if (!raw) throw new Error(i18n.t('notification.cloudNoData'));
-    const rawStr = settings.encryptionPassword ? await decryptContent(raw, settings.encryptionPassword) : raw;
-    let remotePayload: any;
-    if (rawStr.trimStart().startsWith('{')) remotePayload = JSON.parse(rawStr);
-    else {
-      const d = decompress(rawStr);
-      if (d && d.trimStart().startsWith('{')) remotePayload = JSON.parse(d);
-      else throw new Error(i18n.t('notification.cloudFormatError'));
-    }
+    const remotePayload = await downloadRemote();
     const tree = await chrome.bookmarks.getTree();
     const chromeRoots = tree[0]?.children || [];
     await applyMergedTree(remotePayload.bookmarks || [], chromeRoots);
@@ -124,23 +130,13 @@ async function runSync(strategy: string) {
     return { success: true };
   }
 
-  // manual — 先智能合并，有冲突才弹窗
+  // ── manual ──
   if (strategy === 'manual') {
-    const raw = await services.download();
-    if (!raw) throw new Error(i18n.t('notification.cloudNoData'));
-    const rawStr = settings.encryptionPassword ? await decryptContent(raw, settings.encryptionPassword) : raw;
-    let remotePayload: any;
-    if (rawStr.trimStart().startsWith('{')) remotePayload = JSON.parse(rawStr);
-    else {
-      const d = decompress(rawStr);
-      if (d && d.trimStart().startsWith('{')) remotePayload = JSON.parse(d);
-      else throw new Error(i18n.t('notification.cloudFormatError'));
-    }
-
+    const remotePayload = await downloadRemote();
     const remoteFpMap = new Map<string, string>();
     function buildRemoteFp(nodes: any[]) {
       for (const n of nodes) {
-        if (n.url) remoteFpMap.set(`${n.title || ''}||${n.url}`, n.syncId || '');
+        if (n.url) remoteFpMap.set(fp(n.title, n.url), n.syncId || '');
         if (n.children) buildRemoteFp(n.children);
       }
     }
@@ -158,7 +154,6 @@ async function runSync(strategy: string) {
       { snapshotTimestamp: snapInfo?.timestamp, remoteSyncedAt: remotePayload.syncedAt },
     );
 
-    // Preview the merged result → let user confirm
     await chrome.storage.local.set({
       [STORAGE.MANUAL_MERGE]: {
         local: localPayload.bookmarks,
@@ -174,20 +169,8 @@ async function runSync(strategy: string) {
     return { success: true };
   }
 
-  // smart - three-way merge
-  const raw = await services.download();
-  if (!raw) throw new Error(i18n.t('notification.cloudNoData'));
-  const rawStr = settings.encryptionPassword ? await decryptContent(raw, settings.encryptionPassword) : raw;
-
-  let remotePayload: any;
-  if (rawStr.trimStart().startsWith('{')) remotePayload = JSON.parse(rawStr);
-  else {
-    const d = decompress(rawStr);
-    if (d && d.trimStart().startsWith('{')) remotePayload = JSON.parse(d);
-    else throw new Error(i18n.t('notification.cloudFormatError'));
-  }
-
-  // Build fingerprint→syncId map from remote to help local syncId inheritance
+  // ── smart (default) ──
+  const remotePayload = await downloadRemote();
   const remoteFpMap = new Map<string, string>();
   function buildRemoteFp(nodes: any[]) {
     for (const n of nodes) {
@@ -198,7 +181,6 @@ async function runSync(strategy: string) {
   buildRemoteFp(remotePayload.bookmarks || []);
 
   const localPayload = await wrapSyncPayload();
-  // Pass remoteFpMap so local nodes can inherit remote syncIds
   await assignSyncIds(localPayload.bookmarks, remoteFpMap);
   const baseNodes = await loadSnapshot();
   const snapInfo = await getSnapshotInfo();
@@ -210,7 +192,7 @@ async function runSync(strategy: string) {
     { snapshotTimestamp: snapInfo?.timestamp, remoteSyncedAt: remotePayload.syncedAt },
   );
 
-  // ── Safe guard: if safe mode is on and deletion count exceeds threshold, fall back to manual merge ──
+  // ── Safe guard ──
   if (settings.safeMode !== false) {
     const chs = computeChanges(baseNodes || [], merged);
     const delCount = chs.filter(c => c.type === 'deleted').length;
@@ -243,8 +225,7 @@ async function runSync(strategy: string) {
   await applyMergedTree(merged, chromeRoots, settings.orderSyncStrategy === 'none');
   console.log(`[BookmarkSync] Smart merge: applyMergedTree done, skipReorder=${settings.orderSyncStrategy === 'none'}, strategy=${settings.orderSyncStrategy}`);
 
-  // Check if ONLY order changed (no content/parent changes)
-  function fp(t: string, u?: string) { return `${t}||${u || ''}`; }
+  // Check if ONLY order changed
   function flattenForCompare(nodes: any[]): Map<string, { idx: number; parent: string }> {
     const m = new Map();
     function walk(ns: any[], parentTitle = '') {
@@ -269,14 +250,12 @@ async function runSync(strategy: string) {
   console.log(`[BookmarkSync] Order check: onlyOrder=${onlyOrder}, localFingerprints=${lFlat.size}, mergedFingerprints=${mFlat.size}`);
 
   if (onlyOrder) {
-    // Order-only change
     if (settings.orderSyncStrategy === 'none') {
       console.log('[BookmarkSync] Order sync disabled, skipping');
       await saveSyncState({ lastStatus: 'sync_skip_order', lastSyncTime: Date.now(), storageType: label });
       if (settings.enableNotify) showNotification('BookmarkSync', i18n.t('notification.skipOrder'));
       return { success: true };
     }
-    // Apply order change to local but don't upload
     console.log('[BookmarkSync] Only order changed, syncing locally');
     await saveSnapshot(merged, undefined, remotePayload.syncedAt);
     await saveSnapshotRecord('sync', merged);
@@ -285,24 +264,15 @@ async function runSync(strategy: string) {
     return { success: true };
   }
 
-  // Upload merged result to Gist (this becomes canonical base for next sync)
+  // Upload merged result
   const mergedPayload = {
     version: SYNC_VERSION, syncedAt: Date.now(),
     deviceName: settings.deviceName || i18n.t('common.unknownDevice'),
     bookmarks: merged,
   };
-  const content = settings.formatJson
-    ? encodeEmoji(JSON.stringify(mergedPayload, null, 2))
-    : encodeEmoji(JSON.stringify(mergedPayload));
-  const uploadContent = settings.encryptionPassword
-    ? await encryptContent(content, settings.encryptionPassword)
-    : content;
-  await services.upload({ files: { [fileName]: { content: uploadContent } } });
-
-  // Save the EXACT data that was uploaded as the snapshot (canonical base)
+  await uploadJSON(mergedPayload);
   await saveSnapshot(merged, undefined, mergedPayload.syncedAt);
   await saveSnapshotRecord('sync', merged);
-
   await saveSyncState({ lastStatus: 'sync_success', lastSyncTime: Date.now(), storageType: label });
   const logMsg = conflicts > 0 ? i18n.t('notification.syncConflict', { n: conflicts }) : i18n.t('notification.syncSuccess');
   if (settings.enableNotify) showNotification('BookmarkSync', logMsg);
@@ -310,7 +280,6 @@ async function runSync(strategy: string) {
   const added = changes.filter(c => c.type === 'added').length;
   const modified = changes.filter(c => c.type === 'modified').length;
   const deleted = changes.filter(c => c.type === 'deleted').length;
-
   await addSyncLog({ timestamp: Date.now(), deviceName, type: 'sync', result: 'success', added, modified, deleted, changes, conflicts, totalItems: merged.length, snapshotVersion: SYNC_VERSION });
   return { success: true };
 }
@@ -318,7 +287,7 @@ async function runSync(strategy: string) {
 async function runUpload() {
   const payload = await wrapSyncPayload();
   const settings = await optionsStorage.getAll();
-  const deviceName = settings.deviceName || '未知设备';
+  const deviceName = settings.deviceName || i18n.t('common.unknownDevice');
   await assignSyncIds(payload.bookmarks);
   const fileName = settings.storageType === 'gitee_gist' ? settings.giteeGistFileName : settings.gistFileName;
   const content = settings.formatJson
@@ -341,7 +310,7 @@ async function runUpload() {
 async function runDownload() {
   const existing = await countBookmarks();
   const settings = await optionsStorage.getAll();
-  const deviceName = settings.deviceName || '未知设备';
+  const deviceName = settings.deviceName || i18n.t('common.unknownDevice');
   console.log('[BookmarkSync] runDownload: existing bookmarks =', existing);
   if (existing > 0) {
     showNotification('BookmarkSync', i18n.t('notification.skipImport'));
@@ -384,49 +353,6 @@ async function runDownload() {
   return { success: true };
 }
 
-/** Compute change details between base and result tree */
-function computeChanges(base: any[], result: any[]): ChangeDetail[] {
-  function flatten(nodes: any[]): Map<string, { title: string; url?: string }> {
-    const m = new Map();
-    function walk(ns: any[]) {
-      for (const n of ns) {
-        const f = `${n.title || ''}||${n.url || ''}`;
-        m.set(f, { title: n.title, url: n.url });
-        if (n.children) walk(n.children);
-      }
-    }
-    walk(nodes);
-    return m;
-  }
-  const baseMap = flatten(base || []);
-  const resultMap = flatten(result || []);
-  const allFps = new Set([...baseMap.keys(), ...resultMap.keys()]);
-  const changes: ChangeDetail[] = [];
-  const usedDel = new Set<string>(), usedAdd = new Set<string>();
-
-  for (const f of allFps) {
-    const b = baseMap.get(f);
-    const r = resultMap.get(f);
-    if (b && !r) {
-      // Check if it's a "modify" — same title, different URL
-      const paired = [...resultMap.entries()].find(([k, v]) =>
-        !usedAdd.has(k) && v.title === b.title && v.url !== b.url
-      );
-      if (paired) {
-        changes.push({ fingerprint: paired[0], type: 'modified', title: paired[1].title, url: paired[1].url, oldTitle: b.title, oldUrl: b.url });
-        usedDel.add(f); usedAdd.add(paired[0]);
-      } else {
-        changes.push({ fingerprint: f, type: 'deleted', title: b.title, url: b.url });
-        usedDel.add(f);
-      }
-    } else if (!b && r) {
-      if (usedAdd.has(f)) continue;
-      changes.push({ fingerprint: f, type: 'added', title: r.title, url: r.url });
-      usedAdd.add(f);
-    }
-  }
-  return changes;
-}
 
 /** Create or clear the auto-sync alarm based on settings */
 function updateAutoSyncAlarm(settings: any) {

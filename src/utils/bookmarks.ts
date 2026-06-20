@@ -3,7 +3,9 @@ import optionsStorage from './optionsStorage';
 import { generateSyncId, saveMapping, saveMappingBatch } from './syncId';
 import { importBookmarksSimple } from './import';
 import { SYNC_VERSION, STORAGE } from './constants';
+import { fp } from './fingerprint';
 import db from './db';
+import i18n from '../locales/i18n';
 
 const SNAPSHOT_KEY = STORAGE.SNAPSHOT;
 
@@ -30,7 +32,7 @@ export async function wrapSyncPayload(): Promise<SyncPayload> {
   return {
     version: SYNC_VERSION,
     syncedAt: Date.now(),
-    deviceName: settings.deviceName || '未知设备',
+    deviceName: settings.deviceName || i18n.t('common.unknownDevice'),
     bookmarks: bookmarks.bookmarks!,
   };
 }
@@ -79,8 +81,8 @@ export async function assignSyncIds(
         let sid = b2s[node.id];
         // Try to inherit from remote via fingerprint
         if (!sid && node.url && remoteFpMap) {
-          const fp = `${node.title || ''}||${node.url || ''}`;
-          sid = remoteFpMap.get(fp);
+          const f = fp(node.title, node.url);
+          sid = remoteFpMap.get(f);
         }
         if (!sid) {
           sid = generateSyncId();

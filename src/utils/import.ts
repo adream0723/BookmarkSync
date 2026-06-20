@@ -1,9 +1,5 @@
 import { BookmarkInfo } from './models';
-
-/** Generate a fingerprint for a bookmark node */
-function fp(title: string, url?: string): string {
-  return `${title}||${url || ''}`;
-}
+import { fp } from './fingerprint';
 
 /**
  * Apply a merged bookmark tree to Chrome's bookmarks.

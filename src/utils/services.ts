@@ -1,21 +1,22 @@
-import { Setting } from './setting'
+import optionsStorage from './optionsStorage'
 import { giteeHttp, githubHttp } from './http'
+import type { StoredOptions } from './optionsStorage'
 
 class BookmarkService {
-    private getHttp(setting: Setting) {
+    private getHttp(setting: StoredOptions) {
         return setting.storageType === 'gitee_gist' ? giteeHttp : githubHttp;
     }
 
-    private getGistId(setting: Setting): string {
+    private getGistId(setting: StoredOptions): string {
         return setting.storageType === 'gitee_gist' ? setting.giteeGistID : setting.gistID;
     }
 
-    private getGistFileName(setting: Setting): string {
+    private getGistFileName(setting: StoredOptions): string {
         return setting.storageType === 'gitee_gist' ? setting.giteeGistFileName : setting.gistFileName;
     }
 
     async download() {
-        let setting = await Setting.build();
+        const setting = await optionsStorage.getAll();
         const client = this.getHttp(setting);
         const gistId = this.getGistId(setting);
         const fileName = this.getGistFileName(setting);
@@ -24,15 +25,14 @@ class BookmarkService {
             ? `?access_token=${setting.giteeToken}`
             : '';
 
-        let resp = await client.get(`gists/${gistId}${authParam}`).json() as any;
+        const resp = await client.get(`gists/${gistId}${authParam}`).json() as any;
 
         if (resp?.files) {
-            let filenames = Object.keys(resp.files);
+            const filenames = Object.keys(resp.files);
             if (filenames.indexOf(fileName) !== -1) {
-                let gistFile = resp.files[fileName]
+                const gistFile = resp.files[fileName]
                 if (gistFile.truncated && gistFile.raw_url) {
-                    const txt = client.get(gistFile.raw_url, { prefixUrl: '' }).text();
-                    return txt;
+                    return client.get(gistFile.raw_url, { prefixUrl: '' }).text();
                 } else {
                     return gistFile.content
                 }
@@ -42,7 +42,7 @@ class BookmarkService {
     }
 
     async upload(data: any) {
-        let setting = await Setting.build();
+        const setting = await optionsStorage.getAll();
         const client = this.getHttp(setting);
         const gistId = this.getGistId(setting);
 

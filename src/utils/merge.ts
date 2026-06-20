@@ -1,4 +1,5 @@
 import { BookmarkInfo } from './models';
+import { fp } from './fingerprint';
 
 export interface FlatItem {
   fingerprint: string;
@@ -21,10 +22,6 @@ export interface MergeResult {
   merged: BookmarkInfo[];
   conflicts: number;
   totalChanges: number;
-}
-
-function fp(title: string, url?: string): string {
-  return `${title}||${url || ''}`;
 }
 
 function flatten(nodes: BookmarkInfo[], parentFp = ''): FlatItem[] {
