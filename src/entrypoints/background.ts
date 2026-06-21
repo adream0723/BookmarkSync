@@ -147,6 +147,25 @@ async function runSync(strategy: string) {
     const baseNodes = await loadSnapshot();
     const snapInfo = await getSnapshotInfo();
 
+    // ── First sync: no snapshot, show two-way diff merge page ──
+    if (!baseNodes || baseNodes.length === 0) {
+      console.log('[BookmarkSync] Manual merge: no snapshot, opening first-sync merge page');
+      await chrome.storage.local.set({
+        [STORAGE.MANUAL_MERGE]: {
+          local: localPayload.bookmarks,
+          merged: [],
+          remote: remotePayload.bookmarks || [],
+          snapshot: [],
+          snapshotTimestamp: 0,
+          remoteSyncedAt: remotePayload.syncedAt || 0,
+          mode: 'first-sync',
+        },
+      });
+      chrome.tabs.create({ url: chrome.runtime.getURL('merge.html') });
+      await addSyncLog({ timestamp: Date.now(), deviceName, type: 'sync', result: 'success', added: 0, modified: 0, deleted: 0, snapshotVersion: SYNC_VERSION });
+      return { success: true, fallback: 'first-sync' };
+    }
+
     const { merged } = threeWayMerge(
       baseNodes || [],
       localPayload.bookmarks,
@@ -184,6 +203,26 @@ async function runSync(strategy: string) {
   await assignSyncIds(localPayload.bookmarks, remoteFpMap);
   const baseNodes = await loadSnapshot();
   const snapInfo = await getSnapshotInfo();
+
+  // ── First sync: no snapshot, show two-way diff merge page ──
+  if (!baseNodes || baseNodes.length === 0) {
+    console.log('[BookmarkSync] No snapshot found, opening first-sync merge page');
+    const firstSyncDiff = localPayload.bookmarks;
+    await chrome.storage.local.set({
+      [STORAGE.MANUAL_MERGE]: {
+        local: localPayload.bookmarks,
+        merged: [],
+        remote: remotePayload.bookmarks || [],
+        snapshot: [],
+        snapshotTimestamp: 0,
+        remoteSyncedAt: remotePayload.syncedAt || 0,
+        mode: 'first-sync',
+      },
+    });
+    chrome.tabs.create({ url: chrome.runtime.getURL('merge.html') });
+    await addSyncLog({ timestamp: Date.now(), deviceName, type: 'sync', result: 'success', added: 0, modified: 0, deleted: 0, snapshotVersion: SYNC_VERSION });
+    return { success: true, fallback: 'first-sync' };
+  }
 
   const { merged, conflicts } = threeWayMerge(
     baseNodes || [],

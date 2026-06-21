@@ -205,6 +205,11 @@ export async function getSnapshotInfo(): Promise<{ timestamp: number; version: s
   return { timestamp: s.timestamp, version: s.version, count: countNodes(s.bookmarks) };
 }
 
+export async function clearSnapshotHistory(): Promise<void> {
+  await db.clear('snapshotHistory');
+  await chrome.storage.local.remove(STORAGE.SNAPSHOT);
+}
+
 // ───── Misc ─────
 
 export async function countBookmarks(): Promise<number> {

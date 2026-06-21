@@ -11,7 +11,7 @@ import { encryptContent } from '../../utils/crypto';
 
 const STORAGE_KEY = STORAGE.MANUAL_MERGE;
 
-interface MergeData { local: any[]; merged: any[]; remote: any[]; snapshot: any[]; snapshotTimestamp?: number; remoteSyncedAt?: number; }
+interface MergeData { local: any[]; merged: any[]; remote: any[]; snapshot: any[]; snapshotTimestamp?: number; remoteSyncedAt?: number; mode?: 'smart' | 'first-sync'; }
 
 interface FlatInfo { f: string; n: any; depth: number; path: string[]; }
 
@@ -27,7 +27,7 @@ interface DiffItem {
   snapInfo: { title: string; url?: string } | null;
   localInfo: { title: string; url?: string } | null;
   remoteInfo: { title: string; url?: string } | null;
-  smartAction: 'keep' | 'delete';
+  smartAction: 'keep' | 'delete' | 'add';
   userAction: 'keep' | 'delete';
 }
 
@@ -48,6 +48,144 @@ function flattenTree(nodes: any[], d = 0, pp: string[] = []): FlatInfo[] {
     if (n.children) r.push(...flattenTree(n.children, d + 1, path));
   }
   return r;
+}
+
+/** Build diff for first-sync mode: no snapshot, just local vs remote */
+function buildDiffItemsFirstSync(local: any[], remote: any[]): DiffItem[] {
+  const lFlat = flattenTree(local);
+  const rFlat = flattenTree(remote);
+  const lMap = new Map(lFlat.map(x => [x.f, x]));
+  const rMap = new Map(rFlat.map(x => [x.f, x]));
+  const allFps = new Set([...lMap.keys(), ...rMap.keys()]);
+  const items: DiffItem[] = [];
+
+  for (const f of allFps) {
+    const l = lMap.get(f), r = rMap.get(f);
+    const inLocal = !!l, inRemote = !!r;
+    // Skip if both sides have it (no difference)
+    if (inLocal && inRemote) continue;
+    const info = l || r!;
+    items.push({
+      fingerprint: f,
+      path: info.path,
+      depth: info.depth,
+      isFolder: !info.n.url,
+      inSnapshot: false, inLocal, inRemote,
+      snapInfo: null,
+      localInfo: inLocal ? { title: l!.n.title, url: l!.n.url } : null,
+      remoteInfo: inRemote ? { title: r!.n.title, url: r!.n.url } : null,
+      smartAction: 'add',
+      userAction: 'keep',
+    });
+  }
+
+  items.sort((a, b) => a.path.join('/').localeCompare(b.path.join('/')));
+  console.log(`[BookmarkSync] buildDiffItemsFirstSync: ${lFlat.length} local, ${rFlat.length} remote, ${allFps.size} total fps, ${items.length} diffs`);
+  return items;
+}
+
+/** Build all items (including matching) for first-sync mode */
+function buildAllItemsFirstSync(local: any[], remote: any[]): DiffItem[] {
+  const lFlat = flattenTree(local);
+  const rFlat = flattenTree(remote);
+  const lMap = new Map(lFlat.map(x => [x.f, x]));
+  const rMap = new Map(rFlat.map(x => [x.f, x]));
+  const allFps = new Set([...lMap.keys(), ...rMap.keys()]);
+  const items: DiffItem[] = [];
+
+  for (const f of allFps) {
+    const l = lMap.get(f), r = rMap.get(f);
+    const inLocal = !!l, inRemote = !!r;
+    const info = l || r!;
+    items.push({
+      fingerprint: f,
+      path: info.path,
+      depth: info.depth,
+      isFolder: !info.n.url,
+      inSnapshot: false, inLocal, inRemote,
+      snapInfo: null,
+      localInfo: inLocal ? { title: l!.n.title, url: l!.n.url } : null,
+      remoteInfo: inRemote ? { title: r!.n.title, url: r!.n.url } : null,
+      smartAction: inLocal && inRemote ? 'keep' : 'add',
+      userAction: 'keep',
+    });
+  }
+
+  items.sort((a, b) => a.path.join('/').localeCompare(b.path.join('/')));
+  return items;
+}
+
+/** Build final tree for first-sync mode: local base + remote additions */
+function buildFinalTreeFirstSync(local: any[], remote: any[], items: DiffItem[]): any[] {
+  // Collect fingerprints user chose to keep
+  const keepFps = new Set<string>();
+  // Start with all local bookmarks
+  for (const item of items) {
+    if (item.userAction === 'keep') keepFps.add(item.fingerprint);
+  }
+
+  const lFlat = flattenTree(local);
+  const rFlat = flattenTree(remote);
+  const lMap = new Map(lFlat.map(x => [x.f, x]));
+  const rMap = new Map(rFlat.map(x => [x.f, x]));
+
+  // Start with all local flat items that are kept
+  const mergedFlat = new Map<string, FlatInfo>();
+  for (const [f, info] of lMap) {
+    if (keepFps.has(f)) mergedFlat.set(f, info);
+  }
+
+  // Add kept remote-only items
+  for (const [f, info] of rMap) {
+    if (!lMap.has(f) && keepFps.has(f)) mergedFlat.set(f, info);
+  }
+
+  // Collect all fingerprints currently in mergedFlat (for parent existence checks)
+  let mergedFps = new Set(mergedFlat.keys());
+
+  // Also include items in both (not in diff items list, so they're implicitly kept)
+  // Prefer the side whose parent folder exists in mergedFlat
+  for (const [f] of lMap) {
+    if (mergedFlat.has(f)) continue;
+    if (!rMap.has(f)) continue;
+    const lInfo = lMap.get(f)!;
+    const rInfo = rMap.get(f)!;
+    const lParentFp = lInfo.path.length > 1 ? fp(lInfo.path[lInfo.path.length - 2]) : '';
+    const rParentFp = rInfo.path.length > 1 ? fp(rInfo.path[rInfo.path.length - 2]) : '';
+    if (lParentFp && !mergedFps.has(lParentFp) && rParentFp && mergedFps.has(rParentFp)) {
+      mergedFlat.set(f, rInfo);
+    } else {
+      mergedFlat.set(f, lInfo); // default to local
+    }
+  }
+
+  // Rebuild tree
+  mergedFps = new Set(mergedFlat.keys());
+  const byParent = new Map<string, { f: string; n: any; path: string[]; depth: number }[]>();
+  const roots: { f: string; n: any; path: string[]; depth: number }[] = [];
+
+  for (const [f, info] of mergedFlat) {
+    const parentFp = info.path.length > 1 ? fp(info.path[info.path.length - 2]) : '';
+    // If parent fingerprint doesn't exist in mergedFlat (deleted by user), promote to root
+    const effectiveParent = parentFp && mergedFps.has(parentFp) ? parentFp : '';
+    const list = effectiveParent ? (byParent.get(effectiveParent) ?? (byParent.set(effectiveParent, []), byParent.get(effectiveParent)!)) : roots;
+    list.push(info);
+  }
+
+  roots.sort((a, b) => a.n.index - b.n.index);
+  for (const [, children] of byParent) children.sort((a, b) => a.n.index - b.n.index);
+
+  function build(items: { f: string; n: any; path: string[]; depth: number }[]): any[] {
+    return items.map(item => {
+      const node: any = { title: item.n.title };
+      if (item.n.url) node.url = item.n.url;
+      const children = byParent.get(item.f);
+      if (children) node.children = build(children);
+      return node;
+    });
+  }
+
+  return build(roots);
 }
 
 /** Build the unified diff: every fingerprint where not (inAllThree || inNone) */
@@ -211,128 +349,231 @@ function render() {
   loadMergeData().then(data => {
     if (!data) { contentEl.innerHTML = '<div class="empty">' + i18n.t('merge.noData') + '</div>'; return; }
 
-    const cloudNewer = (data.remoteSyncedAt || 0) > (data.snapshotTimestamp || 0);
-    const items = buildDiffItems(data.snapshot || [], data.local, data.remote || [], cloudNewer);
+    const isFirstSync = data.mode === 'first-sync';
+    const cloudNewer = !isFirstSync && (data.remoteSyncedAt || 0) > (data.snapshotTimestamp || 0);
+    let showOnlyDiffs = true;
 
-    const keepCount = items.filter(i => i.smartAction === 'keep').length;
-    const delCount = items.filter(i => i.smartAction === 'delete').length;
-
-    statsEl.innerHTML = i18n.t('merge.count', { n: items.length }) + '（' + i18n.t('merge.keep') + ' ' + keepCount + ' / ' + i18n.t('merge.delete') + ' ' + delCount + '）';
-    if (data.snapshotTimestamp) statsEl.innerHTML += ' | ' + i18n.t('merge.snapshot') + ': ' + fmtTime(data.snapshotTimestamp);
-    if (data.remoteSyncedAt) statsEl.innerHTML += ' | ' + i18n.t('merge.cloud') + ': ' + fmtTime(data.remoteSyncedAt);
-
-    if (items.length === 0) {
-      // If order sync is enabled, apply the merged order silently first
-      (async () => {
-        try {
-          const s = await optionsStorage.getAll();
-          if (s.orderSyncStrategy !== 'none') {
-            console.log(`[BookmarkSync] Manual merge: no content changes, syncing order silently (strategy=${s.orderSyncStrategy})`);
-            const tree = await chrome.bookmarks.getTree();
-            const orderSource = s.orderSyncStrategy === 'cloud' ? data.remote : data.local;
-            console.log(`[BookmarkSync] Order source: ${s.orderSyncStrategy}, remote items: ${data.remote?.length}, local items: ${data.local?.length}`);
-            await applyMergedTree(orderSource, tree[0]?.children || [], false);
-          }
-        } catch (err: any) {
-          console.error('[BookmarkSync] Manual merge order sync failed:', err);
-        }
-      })();
-
-      contentEl.innerHTML = '<div class="empty">' + i18n.t('merge.noChanges') + '</div>';
-      actionsEl.style.display = 'block'; saveBtn.disabled = false; cancelBtn.style.display = 'none';
-      cancelBtn.onclick = () => window.close();
-      saveBtn.textContent = i18n.t('common.close');
-      saveBtn.onclick = () => window.close();
-      return;
+    function buildItems() {
+      if (isFirstSync) {
+        return showOnlyDiffs
+          ? buildDiffItemsFirstSync(data.local, data.remote || [])
+          : buildAllItemsFirstSync(data.local, data.remote || []);
+      }
+      return buildDiffItems(data.snapshot || [], data.local, data.remote || [], cloudNewer);
     }
 
-    // ── Header ──
+    function renderContent() {
+      const items = buildItems();
+      contentEl.innerHTML = '';
+      const statsHTML: string[] = [];
+
+      // ── Stats ──
+      if (isFirstSync) {
+        const localOnly = items.filter(i => i.inLocal && !i.inRemote).length;
+        const remoteOnly = items.filter(i => !i.inLocal && i.inRemote).length;
+        statsHTML.push(i18n.t('merge.count', { n: items.length }) + '（' + i18n.t('merge.local') + ' ' + localOnly + ' / ' + i18n.t('merge.cloud') + ' ' + remoteOnly + '）');
+      } else {
+        const keepCount = items.filter(i => i.smartAction === 'keep').length;
+        const delCount = items.filter(i => i.smartAction === 'delete').length;
+        statsHTML.push(i18n.t('merge.count', { n: items.length }) + '（' + i18n.t('merge.keep') + ' ' + keepCount + ' / ' + i18n.t('merge.delete') + ' ' + delCount + '）');
+        if (data.snapshotTimestamp) statsHTML.push(' | ' + i18n.t('merge.snapshot') + ': ' + fmtTime(data.snapshotTimestamp));
+        if (data.remoteSyncedAt) statsHTML.push(' | ' + i18n.t('merge.cloud') + ': ' + fmtTime(data.remoteSyncedAt));
+      }
+      statsEl.innerHTML = statsHTML.join('');
+
+      // Checkbox: show only diffs
+      const cbWrap = document.createElement('label');
+      cbWrap.style.cssText = 'font-size:12px;cursor:pointer;margin-left:12px;user-select:none;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = showOnlyDiffs;
+      cb.addEventListener('change', () => { showOnlyDiffs = cb.checked; renderContent(); });
+      cbWrap.appendChild(cb);
+      cbWrap.appendChild(document.createTextNode(' ' + i18n.t('merge.showOnlyDiffs')));
+      statsEl.appendChild(cbWrap);
+
+      if (items.length === 0) {
+        // If order sync is enabled, apply the merged order silently first
+        (async () => {
+          try {
+            const s = await optionsStorage.getAll();
+            if (s.orderSyncStrategy !== 'none') {
+              console.log(`[BookmarkSync] Manual merge: no content changes, syncing order silently (strategy=${s.orderSyncStrategy})`);
+              const tree = await chrome.bookmarks.getTree();
+              const orderSource = s.orderSyncStrategy === 'cloud' ? data.remote : data.local;
+              console.log(`[BookmarkSync] Order source: ${s.orderSyncStrategy}, remote items: ${data.remote?.length}, local items: ${data.local?.length}`);
+              await applyMergedTree(orderSource, tree[0]?.children || [], false);
+            }
+          } catch (err: any) {
+            console.error('[BookmarkSync] Manual merge order sync failed:', err);
+          }
+        })();
+
+        contentEl.innerHTML = '<div class="empty">' + i18n.t('merge.noChanges') + '</div>';
+        actionsEl.style.display = 'block'; saveBtn.disabled = false; cancelBtn.style.display = 'none';
+        cancelBtn.onclick = () => window.close();
+        saveBtn.textContent = i18n.t('common.close');
+        saveBtn.onclick = () => window.close();
+        return;
+      }
+
+      // ── Header ──
     const headerRow = document.createElement('div'); headerRow.className = 'diff-header-row';
-    ['📁 ' + i18n.t('merge.snapshot'), '💻 ' + i18n.t('merge.local'), '☁️ ' + i18n.t('merge.cloud'), i18n.t('merge.smartAction'), i18n.t('merge.action')].forEach((t, i) => {
+    const headers = isFirstSync
+      ? ['💻 ' + i18n.t('merge.local'), '☁️ ' + i18n.t('merge.cloud'), i18n.t('merge.smartAction'), i18n.t('merge.action')]
+      : ['📁 ' + i18n.t('merge.snapshot'), '💻 ' + i18n.t('merge.local'), '☁️ ' + i18n.t('merge.cloud'), i18n.t('merge.smartAction'), i18n.t('merge.action')];
+    headers.forEach((t, i) => {
       const h = document.createElement('div'); h.className = 'diff-header'; h.textContent = t;
-      if (i === 3) h.style.flex = '0 0 80px';
-      else if (i === 4) h.style.flex = '0 0 130px';
-      else if (i === 0) h.style.color = '#757575';
-      else if (i === 1) h.style.color = '#1976d2';
-      else if (i === 2) h.style.color = '#2e7d32';
+      if (i === headers.length - 2) h.style.flex = '0 0 80px';
+      else if (i === headers.length - 1) h.style.flex = '0 0 130px';
+      else if (i === 0) h.style.color = isFirstSync ? '#1976d2' : '#757575';
+      else if (i === 1) h.style.color = '#2e7d32';
       headerRow.appendChild(h);
     });
     contentEl.appendChild(headerRow);
 
-    // ── Rows ──
+    // ── Rows (grouped by parent folder) ──
+    // Build folder grouping: parentFpKey → { folderName, items }
+    const folders = new Map<string, { name: string; items: DiffItem[] }>();
     for (const item of items) {
-      const el = document.createElement('div'); el.className = 'diff-row';
+      const parentPath = item.path.slice(0, -1);
+      const parentKey = parentPath.join('/');
+      if (!folders.has(parentKey)) {
+        folders.set(parentKey, { name: parentPath.length > 0 ? parentPath[parentPath.length - 1] : '/', items: [] });
+      }
+      folders.get(parentKey)!.items.push(item);
+    }
 
-      // Columns 1-3: snapshot, local, remote
-      el.appendChild(mkCell(item.snapInfo, item.depth, item.isFolder));
-      el.appendChild(mkCell(item.localInfo, item.depth, item.isFolder));
-      el.appendChild(mkCell(item.remoteInfo, item.depth, item.isFolder));
+    for (const [parentKey, folder] of folders) {
+      // Folder header row
+      const folderEl = document.createElement('div'); folderEl.className = 'diff-row diff-folder-row';
+      folderEl.style.cssText = 'background:#f5f5f5;font-weight:600;border-bottom:1px solid #e0e0e0;';
+      const folderCell = document.createElement('div'); folderCell.className = 'diff-cell';
+      folderCell.style.cssText = 'flex:1;gap:4px;';
+      // Indent based on depth
+      const pathParts = parentKey ? parentKey.split('/') : [];
+      folderCell.appendChild(indent(pathParts.length));
+      const fi = document.createElement('span'); fi.textContent = '📁'; folderCell.appendChild(fi);
+      const fn = document.createElement('span'); fn.textContent = folder.name; fn.style.fontSize = '13px'; folderCell.appendChild(fn);
+      // Counts
+      const cnt = document.createElement('span');
+      cnt.style.cssText = 'font-size:11px;color:#888;margin-left:8px;font-weight:400;';
+      const localCnt = folder.items.filter(i => i.inLocal).length;
+      const remoteCnt = folder.items.filter(i => i.inRemote).length;
+      cnt.textContent = `(${localCnt}${isFirstSync ? '' : 'L'} / ${remoteCnt}${isFirstSync ? '' : 'R'})`;
+      folderCell.appendChild(cnt);
+      folderEl.appendChild(folderCell);
+      // Placeholder cells for remaining columns to keep alignment
+      const colCount = isFirstSync ? 4 : 5;
+      for (let c = 1; c < colCount; c++) { const d = document.createElement('div'); d.className = 'diff-cell'; d.style.flex = c === colCount - 2 ? '0 0 80px' : c === colCount - 1 ? '0 0 130px' : '1'; folderEl.appendChild(d); }
+      contentEl.appendChild(folderEl);
 
-      // Column 4: smart decision badge
+      // Child items
+      for (const item of folder.items) {
+        const el = document.createElement('div'); el.className = 'diff-row';
+
+        if (!isFirstSync) el.appendChild(mkCell(item.snapInfo, item.depth, item.isFolder));
+        el.appendChild(mkCell(item.localInfo, item.depth, item.isFolder));
+        el.appendChild(mkCell(item.remoteInfo, item.depth, item.isFolder));
+
+      // Column: smart decision badge (last-2 or last-1 for first-sync)
       const smartCell = document.createElement('div'); smartCell.className = 'diff-cell';
       smartCell.style.flex = '0 0 80px'; smartCell.style.justifyContent = 'center';
       const badge = document.createElement('span');
       const isKeep = item.smartAction === 'keep';
-      badge.textContent = isKeep ? i18n.t('merge.keep') : i18n.t('merge.delete');
-      badge.style.cssText = `font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;background:${isKeep?'#2e7d32':'#c62828'};`;
+      const isAdd = item.smartAction === 'add';
+      if (isFirstSync) {
+        badge.textContent = item.inLocal && item.inRemote ? i18n.t('merge.keep') : i18n.t('merge.add');
+        badge.style.cssText = `font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;background:${isAdd?'#1565c0':'#2e7d32'};`;
+      } else {
+        badge.textContent = isKeep ? i18n.t('merge.keep') : i18n.t('merge.delete');
+        badge.style.cssText = `font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;background:${isKeep?'#2e7d32':'#c62828'};`;
+      }
       smartCell.appendChild(badge);
       el.appendChild(smartCell);
 
-      // Column 5: radio buttons
+      // Last column: radio buttons (keep / delete), or "一致" for matching items when showing all
       const actCell = document.createElement('div'); actCell.className = 'diff-cell';
       actCell.style.flex = '0 0 130px'; actCell.style.gap = '2px'; actCell.style.justifyContent = 'center';
 
-      const mkRadio = (label: string, value: 'keep' | 'delete') => {
-        const lbl = document.createElement('label');
-        lbl.style.cssText = 'font-size:12px;cursor:pointer;display:flex;align-items:center;gap:2px;';
-        const rb = document.createElement('input');
-        rb.type = 'radio'; rb.name = item.fingerprint;
-        rb.checked = item.userAction === value;
-        rb.addEventListener('change', () => { if (rb.checked) { item.userAction = value; updateSaveBtn(); } });
-        lbl.appendChild(rb);
-        lbl.appendChild(document.createTextNode(label));
-        return lbl;
-      };
+      if (!showOnlyDiffs && item.inLocal && item.inRemote) {
+        // Both sides match, no action needed
+        const matchLabel = document.createElement('span');
+        matchLabel.textContent = i18n.t('merge.consistent');
+        matchLabel.style.cssText = 'font-size:11px;color:#999;';
+        actCell.appendChild(matchLabel);
+      } else {
+        const mkRadio = (label: string, value: 'keep' | 'delete') => {
+          const lbl = document.createElement('label');
+          lbl.style.cssText = 'font-size:12px;cursor:pointer;display:flex;align-items:center;gap:2px;';
+          const rb = document.createElement('input');
+          rb.type = 'radio'; rb.name = item.fingerprint;
+          rb.checked = item.userAction === value;
+          rb.addEventListener('change', () => { if (rb.checked) { item.userAction = value; updateSaveBtn(); } });
+          lbl.appendChild(rb);
+          lbl.appendChild(document.createTextNode(label));
+          return lbl;
+        };
 
-      actCell.appendChild(mkRadio(i18n.t('merge.keep'), 'keep'));
-      actCell.appendChild(mkRadio(i18n.t('merge.delete'), 'delete'));
+        actCell.appendChild(mkRadio(i18n.t('merge.keep'), 'keep'));
+        actCell.appendChild(mkRadio(i18n.t('merge.delete'), 'delete'));
+      }
       el.appendChild(actCell);
 
       contentEl.appendChild(el);
     }
+  }
 
     // ── Actions ──
     actionsEl.style.display = 'block'; saveBtn.disabled = false; cancelBtn.style.display = 'inline-block';
     cancelBtn.onclick = () => window.close();
 
     function updateSaveBtn() {
-      const keepNum = items.filter(i => i.userAction === 'keep').length;
-      saveBtn.textContent = i18n.t('merge.confirmKeep', { n: keepNum });
+      if (isFirstSync) {
+        const keepNum = items.filter(i => i.userAction === 'keep').length;
+        saveBtn.textContent = i18n.t('merge.confirmAdd', { n: keepNum });
+      } else {
+        const keepNum = items.filter(i => i.userAction === 'keep').length;
+        saveBtn.textContent = i18n.t('merge.confirmKeep', { n: keepNum });
+      }
     }
     updateSaveBtn();
 
     saveBtn.onclick = async () => {
       saveBtn.disabled = true; saveBtn.textContent = i18n.t('merge.saving');
       try {
-        const mergedTree = buildFinalTree(data.snapshot || [], data.local, data.remote || [], items, cloudNewer);
+        const mergedTree = isFirstSync
+          ? buildFinalTreeFirstSync(data.local, data.remote || [], items)
+          : buildFinalTree(data.snapshot || [], data.local, data.remote || [], items, cloudNewer);
+        console.log('[BookmarkSync] Merge: mergedTree roots=', mergedTree.map((r: any) => r.title + '(' + (r.children?.length||0) + ' children)'));
+        mergedTree.forEach((root: any) => {
+          function logTree(nodes: any[], depth: number) {
+            for (const n of nodes) {
+              console.log(`[BookmarkSync]   ${'  '.repeat(depth)}${n.title}${n.url ? ' → ' + n.url : ''}`);
+              if (n.children) logTree(n.children, depth + 1);
+            }
+          }
+          if (root.children) logTree(root.children, 1);
+        });
         await applyMerge(mergedTree);
 
         // Log change details
-        const changes = computeChanges(data.snapshot || [], mergedTree);
-        const added = changes.filter(c => c.type === 'added').length;
-        const modified = changes.filter(c => c.type === 'modified').length;
-        const deleted = changes.filter(c => c.type === 'deleted').length;
+        const changes = isFirstSync ? [] : computeChanges(data.snapshot || [], mergedTree);
+        const added = isFirstSync ? items.filter(i => i.userAction === 'keep').length : changes.filter(c => c.type === 'added').length;
+        const modified = isFirstSync ? 0 : changes.filter(c => c.type === 'modified').length;
+        const deleted = isFirstSync ? items.filter(i => i.userAction === 'delete').length : changes.filter(c => c.type === 'deleted').length;
         const s = await optionsStorage.getAll();
         addSyncLog({ timestamp: Date.now(), deviceName: s.deviceName || i18n.t('common.unknownDevice'), type: 'sync', result: 'success', added, modified, deleted, changes, snapshotVersion: SYNC_VERSION });
 
         saveBtn.textContent = i18n.t('merge.mergeComplete');
-        setTimeout(() => window.close(), 1500);
+        window.close();
       } catch (e: any) {
         saveBtn.textContent = i18n.t('merge.mergeFailed') + ': ' + e.message;
         saveBtn.disabled = false;
       }
     };
-  });
+  }
+  renderContent();
+});
 }
 
 function mkCell(v: { title: string; url?: string } | null, depth: number, isFolder: boolean): HTMLDivElement {

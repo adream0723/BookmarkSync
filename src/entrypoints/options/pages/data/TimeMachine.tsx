@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Modal, Pagination, Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { getSnapshotHistory, SnapshotRecord, saveSnapshot } from '../../../../utils/bookmarks';
+import { getSnapshotHistory, clearSnapshotHistory, SnapshotRecord, saveSnapshot } from '../../../../utils/bookmarks';
 import type { BookmarkInfo } from '../../../../utils/models';
 import { applyMergedTree } from '../../../../utils/import';
 import optionsStorage from '../../../../utils/optionsStorage';
@@ -21,6 +21,7 @@ const TimeMachine: React.FC = () => {
   const [treeModal, setTreeModal] = useState<{ nodes: BookmarkInfo[]; title: string } | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'danger'; text: string } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const load = useCallback(async (p: number) => {
     const { records, total: t } = await getSnapshotHistory(p, PAGE_SIZE);
@@ -52,12 +53,30 @@ const TimeMachine: React.FC = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    setShowClearConfirm(false);
+    try {
+      await clearSnapshotHistory();
+      setSnapshots([]);
+      setTotal(0);
+      setPage(1);
+      setMessage({ type: 'success', text: `✅ ${t('timemachine.cleared')}` });
+    } catch (err: any) {
+      setMessage({ type: 'danger', text: `❌ ${t('timemachine.clearFailed')}: ${err.message}` });
+    }
+  };
+
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
 
   return (
     <div className="settings-page">
       <Card className="settings-card">
-        <Card.Header className="settings-card-header">{t('timemachine.title')}</Card.Header>
+        <Card.Header className="settings-card-header d-flex justify-content-between align-items-center">
+          <span>{t('timemachine.title')}</span>
+          <Button variant="outline-danger" size="sm" onClick={() => setShowClearConfirm(true)}>
+            🗑 {t('timemachine.clearAll')}
+          </Button>
+        </Card.Header>
         <Card.Body>
           {message && (
             <div className={`alert alert-${message.type === 'success' ? 'success' : 'danger'} py-2`} style={{ fontSize: 14 }}>
@@ -122,6 +141,17 @@ const TimeMachine: React.FC = () => {
           )}
         </Card.Body>
       </Card>
+
+      <Modal show={showClearConfirm} onHide={() => setShowClearConfirm(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('timemachine.clearTitle')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>{t('timemachine.clearConfirm')}</Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowClearConfirm(false)}>{t('common.cancel')}</Button>
+          <Button variant="danger" size="sm" onClick={handleClearAll}>{t('timemachine.clearAll')}</Button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal show={!!treeModal} onHide={() => setTreeModal(null)} size="lg" scrollable>
         <Modal.Header closeButton>
